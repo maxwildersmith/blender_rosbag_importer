@@ -10,7 +10,8 @@ from pathlib import Path
 import bpy
 from bpy_extras.io_utils import ImportHelper
 
-from . import import_images, import_point_clouds
+from . import (grid_map_cache, import_grid_map, import_images, import_point_clouds,
+               materials, point_cloud_cache)
 from .bag_reader import BagReader
 from .properties import RosbagTopicEntry, default_kind_for
 from .tf_tree import TFTree
@@ -68,6 +69,10 @@ class IMPORT_OT_rosbag(bpy.types.Operator, ImportHelper):
         name="Image Stride", default=1, min=1,
         description="Import every Nth image message",
     )
+    grid_map_stride: bpy.props.IntProperty(
+        name="Grid Map Stride", default=1, min=1,
+        description="Import every Nth grid map message",
+    )
     topics: bpy.props.CollectionProperty(type=RosbagTopicEntry)
     topics_active_index: bpy.props.IntProperty()
 
@@ -78,6 +83,7 @@ class IMPORT_OT_rosbag(bpy.types.Operator, ImportHelper):
         col.prop(self, "point_stride")
         col.prop(self, "max_points_per_scan")
         col.prop(self, "image_stride")
+        col.prop(self, "grid_map_stride")
 
         layout.label(text="Topics:")
         if not self.topics:
@@ -121,30 +127,49 @@ class IMPORT_OT_rosbag(bpy.types.Operator, ImportHelper):
 
         max_points = self.max_points_per_scan or None
         frames_dir = bag_path.parent / f"{bag_path.stem}_frames"
+        point_cloud_material = None
+        grid_map_material = None
 
         for topic in selected:
             if topic.kind == "POINTCLOUD":
-                created = import_point_clouds.import_point_cloud_topic(
-                    reader, tf_tree, topic.name, align, empties, collection,
+                cache_dir = frames_dir / f"{topic.name.strip('/').replace('/', '_')}_cache"
+                cache = point_cloud_cache.cache_point_cloud_topic(
+                    reader, topic.name, cache_dir, align,
                     max_points_per_scan=max_points, stride=self.point_stride,
                 )
-                self.report({"INFO"}, f"{topic.name}: {len(created)} point cloud scans")
+                if point_cloud_material is None:
+                    point_cloud_material = materials.ensure_point_cloud_material()
+                import_point_clouds.create_animated_point_cloud(
+                    topic.name, cache, empties, collection, point_cloud_material,
+                )
+                self.report({"INFO"}, f"{topic.name}: {len(cache.frame_to_path)} point cloud scans (animated)")
+            elif topic.kind == "GRIDMAP":
+                cache_dir = frames_dir / f"{topic.name.strip('/').replace('/', '_')}_cache"
+                cache = grid_map_cache.cache_grid_map_topic(
+                    reader, topic.name, cache_dir, align, stride=self.grid_map_stride,
+                )
+                if grid_map_material is None:
+                    grid_map_material = materials.ensure_grid_map_material()
+                import_grid_map.create_animated_grid_map(
+                    topic.name, cache, empties, collection, grid_map_material,
+                )
+                self.report({"INFO"}, f"{topic.name}: {len(cache.frame_to_path)} grid map scans (animated)")
             elif topic.kind == "IMAGE":
                 out_dir = frames_dir / topic.name.strip("/").replace("/", "_")
-                paths = import_images.extract_image_sequence(
+                sequence = import_images.extract_image_sequence(
                     reader, topic.name, out_dir, align, stride=self.image_stride,
                 )
-                image = import_images.load_image_sequence(paths, name=topic.name.strip("/"))
+                image = import_images.load_image_sequence(sequence, name=topic.name.strip("/"))
                 if image is not None:
                     empty = import_images.create_image_empty(
-                        image, len(paths), collection, name=f"img_{topic.name.strip('/')}",
+                        image, sequence, collection, name=f"img_{topic.name.strip('/')}",
                     )
                     # Best-effort: parent to the TF frame matching the topic's camera,
                     # if a frame with a matching name prefix was published.
                     camera_frame = _guess_camera_frame(topic.name, empties)
                     if camera_frame is not None:
                         empty.parent = empties[camera_frame]
-                self.report({"INFO"}, f"{topic.name}: {len(paths)} image frames")
+                self.report({"INFO"}, f"{topic.name}: {len(sequence.paths)} image frames (animated)")
 
         return {"FINISHED"}
 

@@ -15,6 +15,7 @@ from .bag_reader import BagReader
 logger = logging.getLogger(__name__)
 
 TF_TOPICS = ["/tf", "/tf_static"]
+TF_MSGTYPE = "tf2_msgs/msg/TFMessage"
 
 
 @dataclass
@@ -41,7 +42,18 @@ class TFTree:
     def from_bag(cls, reader: BagReader) -> "TFTree":
         available = set(reader.topics()) & set(TF_TOPICS)
         frames: dict[str, TFFrame] = {}
+        warned_msgtypes: set[str] = set()
         for bag_msg in reader.messages(topics=sorted(available)):
+            if bag_msg.msgtype != TF_MSGTYPE:
+                if bag_msg.msgtype not in warned_msgtypes:
+                    logger.warning(
+                        "Skipping %s message(s) on '%s' - expected %s (some bag formats "
+                        "reuse connection ids across split files and mislabel messages)",
+                        bag_msg.msgtype, bag_msg.topic, TF_MSGTYPE,
+                    )
+                    warned_msgtypes.add(bag_msg.msgtype)
+                continue
+
             is_static = bag_msg.topic == "/tf_static"
             for tfs in bag_msg.msg.transforms:
                 child = tfs.child_frame_id

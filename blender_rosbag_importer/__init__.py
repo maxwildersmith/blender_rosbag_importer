@@ -15,30 +15,45 @@ _VENDOR_DIR = Path(__file__).parent / "vendor"
 if _VENDOR_DIR.exists() and str(_VENDOR_DIR) not in sys.path:
     sys.path.append(str(_VENDOR_DIR))
 
-from . import preferences
+try:
+    import bpy  # noqa: F401
+    _HAS_BPY = True
+except ImportError:
+    # Imported as a plain python package outside Blender (e.g. the pure-python tests
+    # importing a sibling module) - skip the bpy-dependent addon machinery entirely
+    # rather than crashing the whole package import.
+    _HAS_BPY = False
 
-_DEPENDENCIES_AVAILABLE = preferences.dependencies_available()
+if _HAS_BPY:
+    from . import preferences
 
-if _DEPENDENCIES_AVAILABLE:
-    from . import operators, properties, ui_list
-    _MODULES = (properties, ui_list, operators)
+    _DEPENDENCIES_AVAILABLE = preferences.dependencies_available()
+
+    if _DEPENDENCIES_AVAILABLE:
+        from . import import_grid_map, import_images, import_point_clouds, operators, properties, ui_list
+        _MODULES = (properties, ui_list, import_point_clouds, import_grid_map, import_images, operators)
+    else:
+        _MODULES = ()
+
+    def register() -> None:
+        preferences.register()
+        for module in _MODULES:
+            module.register()
+        if not _DEPENDENCIES_AVAILABLE:
+            print("[rosbag_importer] rosbags not installed - install it from "
+                  "Edit > Preferences > Add-ons > ROS Bag Importer")
+
+    def unregister() -> None:
+        for module in reversed(_MODULES):
+            module.unregister()
+        preferences.unregister()
+
 else:
-    _MODULES = ()
+    def register() -> None:
+        raise RuntimeError("blender_rosbag_importer.register() requires running inside Blender")
 
-
-def register() -> None:
-    preferences.register()
-    for module in _MODULES:
-        module.register()
-    if not _DEPENDENCIES_AVAILABLE:
-        print("[rosbag_importer] rosbags not installed - install it from "
-              "Edit > Preferences > Add-ons > ROS Bag Importer")
-
-
-def unregister() -> None:
-    for module in reversed(_MODULES):
-        module.unregister()
-    preferences.unregister()
+    def unregister() -> None:
+        raise RuntimeError("blender_rosbag_importer.unregister() requires running inside Blender")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,10 @@
+schema_version = "1.0.0"
+id = "blender_rosbag_importer"
+version = "0.1.0"
+name = "ROS Bag Importer"
+tagline = "Import point clouds, TF motion, and image sequences from ROS bags"
+maintainer = "Max Wilder-Smith <maxwildersmith@gmail.com>"
+type = "add-on"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+# wheels = [...] and platforms = [...] are appended per-platform by build.py

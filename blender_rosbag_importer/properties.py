@@ -9,12 +9,14 @@ import bpy
 
 TOPIC_KIND_ITEMS = [
     ("POINTCLOUD", "Point Cloud", "Import as native Blender point cloud objects"),
+    ("GRIDMAP", "Grid Map", "Import as an animated elevation-map heightfield mesh"),
     ("IMAGE", "Image Sequence", "Import as a Blender image sequence"),
     ("SKIP", "Skip", "Do not import this topic"),
 ]
 
 _MSGTYPE_TO_DEFAULT_KIND = {
     "sensor_msgs/msg/PointCloud2": "POINTCLOUD",
+    "grid_map_msgs/msg/GridMap": "GRIDMAP",
     "sensor_msgs/msg/Image": "IMAGE",
     "sensor_msgs/msg/CompressedImage": "IMAGE",
 }
